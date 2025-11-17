@@ -13,27 +13,34 @@ import instructorRoutes from './routes/instructor.js';
 import certificateRoutes from './routes/certificates.js';
 import studentRoutes from './routes/students.js';
 import studentProgressRoutes from './routes/studentProgress.js';
-//////////////////////////////////////////////////////////////////
+
 dotenv.config();
 
 const app = express();
 const server = createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
-    methods: ['GET', 'POST']
-  }
-});
-// CORS configuration
+
+// Allowed origins
+const allowedOrigins = [
+  'http://localhost:3000',                                // Dev frontend
+  'https://frontend-8zboov25a-daniels-projects-7a223cf3.vercel.app', // Deployed frontend
+].filter(Boolean);
+
+// Express CORS middleware
 app.use(cors({
-  origin: 'http://localhost:3000', // Your frontend URL
+  origin: (origin, callback) => {
+    // allow requests with no origin (curl, Postman, etc.)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS policy does not allow access from ${origin}`));
+    }
+  },
   credentials: true
 }));
-// Make io accessible to our router
-app.set('io', io);
 
 // Middleware
-app.use(cors());
 app.use(express.json());
 
 // Routes
@@ -42,9 +49,19 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/lessons', lessonRoutes);
 app.use('/api/instructor', instructorRoutes);
 app.use('/api/certificates', certificateRoutes);
-app.use('/api/students', studentRoutes); // This was likely missing
-app.use('/api/instructor', studentProgressRoutes);
-// Socket.io for real-time features
+app.use('/api/students', studentRoutes);
+app.use('/api/student-progress', studentProgressRoutes);
+
+// Socket.io setup
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+app.set('io', io);
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -62,20 +79,20 @@ io.on('connection', (socket) => {
   });
 });
 
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
+  });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
     success: false,
     message: 'Something went wrong!'
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found'
   });
 });
 
